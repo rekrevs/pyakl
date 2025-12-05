@@ -17,6 +17,7 @@ Key design decisions:
 from __future__ import annotations
 from abc import ABC, abstractmethod
 from typing import Optional, TYPE_CHECKING
+import weakref
 
 if TYPE_CHECKING:
     from typing import List as TypingList
@@ -357,6 +358,132 @@ class Reflection(Term):
 
     def __repr__(self) -> str:
         return f"{{reflection: {self._id}}}"
+
+    def __str__(self) -> str:
+        return repr(self)
+
+
+class _PortState:
+    """
+    Holder for port state that survives the port itself.
+
+    This allows the finalizer to access the current stream tail
+    at the time the port is garbage collected.
+    """
+    __slots__ = ('initial_stream', 'stream_tail', 'closed')
+
+    def __init__(self, initial_tail: Var) -> None:
+        self.initial_stream = initial_tail  # Never changes - for open_port/2
+        self.stream_tail = initial_tail     # Updated on each send
+        self.closed = False
+
+
+class Port(Term):
+    """
+    AKL port for multi-sender communication.
+
+    A port provides a communication channel where multiple senders can
+    send messages that appear on a shared stream. The key feature is
+    automatic closure: when no more references to the port exist, the
+    stream is terminated with NIL.
+
+    This uses Python's weakref.finalize() to detect when the port
+    becomes unreachable and close the stream.
+
+    Attributes:
+        _state: Shared state object holding current stream tail
+        _id: Unique identifier for debugging
+    """
+
+    __slots__ = ('_state', '_id', '_finalizer', '__weakref__')
+
+    _counter: int = 0
+
+    def __init__(self) -> None:
+        """Create a new port with an unbound stream tail."""
+        Port._counter += 1
+        self._id = Port._counter
+
+        # Create state holder with initial stream tail
+        self._state = _PortState(Var(f"_Stream{self._id}"))
+
+        # Register finalizer to close stream when port is garbage collected.
+        # We pass the _state object which holds the current tail.
+        # When the port dies, the callback can access the current tail.
+        self._finalizer = weakref.finalize(
+            self, Port._do_close, self._state
+        )
+
+    @staticmethod
+    def _do_close(state: _PortState) -> None:
+        """
+        Called when port has no more references.
+
+        Binds the stream tail to NIL to signal end of stream.
+        """
+        if state.closed:
+            return
+        state.closed = True
+
+        # Only close if stream tail is still unbound
+        tail = state.stream_tail.deref()
+        if isinstance(tail, Var) and tail.binding is None:
+            tail.binding = NIL
+
+    @property
+    def stream(self) -> Var:
+        """Get the initial stream variable (head of stream)."""
+        return self._state.initial_stream
+
+    def send(self, message: Term) -> bool:
+        """
+        Send a message to this port.
+
+        The message appears on the stream immediately.
+
+        Args:
+            message: The term to send
+
+        Returns:
+            True if successful, False if port is closed
+        """
+        if self._state.closed:
+            return False
+
+        # Get current stream tail
+        tail = self._state.stream_tail.deref()
+
+        # If tail is already bound to NIL, port is closed
+        if tail is NIL:
+            self._state.closed = True
+            return False
+
+        # If tail is not a variable, something is wrong
+        if not isinstance(tail, Var):
+            return False
+
+        # Create new cons cell: [message | NewTail]
+        new_tail = Var(f"_Stream{self._id}")
+        cons = Cons(message, new_tail)
+
+        # Bind old tail to the cons cell (extends the stream)
+        tail.binding = cons
+
+        # Update state to point to the new tail
+        self._state.stream_tail = new_tail
+
+        return True
+
+    def close(self) -> None:
+        """Explicitly close the port."""
+        Port._do_close(self._state)
+
+    def deref(self) -> Term:
+        return self
+
+    def __repr__(self) -> str:
+        status = "closed" if self._state.closed else "open"
+        return f"{{port:{self._id}:{status}}}"
 
     def __str__(self) -> str:
         return repr(self)

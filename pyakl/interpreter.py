@@ -167,6 +167,13 @@ class Interpreter:
             yield from self._execute(inner_goal)
             return
 
+        # Handle @ operator (send to port): Message@Port -> send(Message, Port)
+        if isinstance(goal, Struct) and goal.functor == Atom("@") and goal.arity == 2:
+            # Transform to send/2 call
+            send_goal = Struct(Atom("send"), (goal.args[0], goal.args[1]))
+            yield from self._execute(send_goal)
+            return
+
         # Get functor info
         if isinstance(goal, Atom):
             name = goal.name

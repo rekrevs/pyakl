@@ -16,7 +16,7 @@ import operator
 import sys
 import time
 
-from .term import Term, Var, Atom, Integer, Float, Struct, Cons, NIL, make_list, list_to_python
+from .term import Term, Var, Atom, Integer, Float, Struct, Cons, NIL, Port, make_list, list_to_python
 from .unify import unify, copy_term as copy_term_impl
 
 if TYPE_CHECKING:
@@ -983,9 +983,22 @@ def builtin_read_term(exstate: 'ExState', andb: 'AndBox', args: tuple[Term, ...]
         return unify(args[1], result, exstate)
 
 
+@register_builtin("format", 1)
+def builtin_format_1(exstate: 'ExState', andb: 'AndBox', args: tuple[Term, ...]) -> bool:
+    """format/1 - Formatted output with no arguments. format(Format)."""
+    fmt = args[0].deref()
+
+    if not isinstance(fmt, Atom):
+        return False
+
+    output = _format_string(fmt.name, [])
+    print(output, end='')
+    return True
+
+
 @register_builtin("format", 2)
-def builtin_format_stream(exstate: 'ExState', andb: 'AndBox', args: tuple[Term, ...]) -> bool:
-    """format/2 - Formatted output to stream. format(Format, Args) with stream via @."""
+def builtin_format_2(exstate: 'ExState', andb: 'AndBox', args: tuple[Term, ...]) -> bool:
+    """format/2 - Formatted output. format(Format, Args)."""
     # This is the simple version - format(FormatString, ArgList)
     # The -Out accumulator syntax is not yet supported
     fmt = args[0].deref()
@@ -1278,6 +1291,78 @@ def builtin_numberof(exstate: 'ExState', andb: 'AndBox', args: tuple[Term, ...])
     count = len(solutions)
 
     return unify(args[1], Integer(count), exstate)
+
+
+# =============================================================================
+# Ports (streams)
+# =============================================================================
+
+@register_builtin("open_port", 2)
+def builtin_open_port(exstate: 'ExState', andb: 'AndBox', args: tuple[Term, ...]) -> bool:
+    """open_port/2 - Create a port/stream pair.
+
+    open_port(Port, Stream) creates a new port and unifies:
+    - Port: The port object (for sending messages)
+    - Stream: A stream (list) that will receive sent messages
+
+    The stream grows as messages are sent to the port.
+    When all references to the port are gone, the stream is
+    terminated with [] (empty list).
+    """
+    port = Port()
+    # The stream starts as an unbound variable (the initial tail)
+    # We need to capture this BEFORE any sends happen
+    initial_stream = port.stream
+
+    # Unify Port argument with the port object
+    if not unify(args[0], port, exstate):
+        return False
+
+    # Unify Stream argument with the initial stream variable
+    if not unify(args[1], initial_stream, exstate):
+        return False
+
+    return True
+
+
+@register_builtin("send", 2)
+def builtin_send_2(exstate: 'ExState', andb: 'AndBox', args: tuple[Term, ...]) -> bool:
+    """send/2 - Send a message to a port.
+
+    send(Message, Port) sends Message to Port.
+    The message appears on the port's stream immediately.
+
+    Fails if Port is not a port or if the port is closed.
+    """
+    message = args[0].deref()
+    port = args[1].deref()
+
+    if not isinstance(port, Port):
+        return False
+
+    return port.send(message)
+
+
+@register_builtin("send", 3)
+def builtin_send_3(exstate: 'ExState', andb: 'AndBox', args: tuple[Term, ...]) -> bool:
+    """send/3 - Send a message to a port with sequencing.
+
+    send(Message, Port, Port2) sends Message to Port and unifies
+    Port2 with Port (for sequencing sends in deterministic code).
+
+    This form allows chaining: send(M1, P, P1), send(M2, P1, P2), ...
+    """
+    message = args[0].deref()
+    port = args[1].deref()
+
+    if not isinstance(port, Port):
+        return False
+
+    if not port.send(message):
+        return False
+
+    # Unify Port2 with Port (they're the same port)
+    return unify(args[2], port, exstate)
 
 
 # =============================================================================

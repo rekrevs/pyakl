@@ -486,7 +486,7 @@ Add missing built-in predicates needed for the knights tour demo.
 
 ---
 
-### B-ENGINE-04 [READY] Implement ports (streams)
+### B-ENGINE-04 [DONE] Implement ports (streams)
 
 Implement AKL ports for concurrent stream communication.
 
@@ -500,21 +500,20 @@ Implement AKL ports for concurrent stream communication.
 - Use Python `weakref.finalize()` for automatic closure
 
 **Acceptance Criteria:**
-- `open_port(Port, Stream)` creates connected port/stream
-- `X@Port` sends X to Port, appears on Stream
-- Port closes when no more senders reference it
-- cipher.akl and knights.akl demos work
+- [x] `open_port(Port, Stream)` creates connected port/stream
+- [x] `X@Port` sends X to Port, appears on Stream
+- [x] Port closes when no more senders reference it
+- [ ] cipher.akl and knights.akl demos work (requires guard semantics)
 
 **Depends on:** B-INTERP-01
 
-**Research Completed:** T-ENGINE-02
+**Tasks:**
+- T-ENGINE-02 (research) - DONE
+- T-ENGINE-03 (implementation) - DONE
 
-**Implementation Approach:**
-Use Python's `weakref.finalize()` to trigger port closure when refcount
-hits zero. This provides immediate cleanup (no GC delay) and handles
-multiple references correctly. See `docs/ports.md` for full design.
-
-**Next:** T-ENGINE-03 (implementation task)
+**Notes:**
+- Ports implemented and working
+- Full demos (knights, cipher) require guard semantics (B-GUARD-01)
 
 ---
 
