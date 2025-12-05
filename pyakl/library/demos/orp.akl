@@ -1,0 +1,35 @@
+% Or-parallel Prolog interpreter in Concurrent Prolog by Ken Kahn
+% adapted for AKL by Sverker Janson
+
+solve([]):-
+    ->	true.
+solve([A|As]) :-
+	clauses(A,Cs)
+    ->	resolve(A,Cs,As).
+
+resolve(A, [(A :- Bs)|_Cs], As) :- 
+	concat(Bs, As, ABs),
+	solve(ABs)
+    ?	true.
+resolve(A, [_C|Cs], As) :-
+	resolve(A, Cs, As)
+    ?	true.
+
+clauses(member(_,_), [	(member(E, [E|_]) :- []),
+			(member(E, [_|R]) :- [member(E,R)])  ]).
+
+clauses(ancestor(_,_),[	(ancestor(X,Y) :- [parent(X,Y)]),
+			(ancestor(X,Y) :- [parent(X,Z), ancestor(Z,Y)]) ]).
+
+clauses(parent(_,_), [	(parent(a,ma) :- []),
+			(parent(a,fa) :- []),
+			(parent(b,mb) :- []),
+			(parent(b,fb) :- []),
+			(parent(fa,c) :- []),
+			(parent(mb,c) :- [])  ]).
+
+concat([A|X1], Y, Z) :-
+    |	Z=[A|Z1],
+	concat(X1, Y, Z1).
+concat([], Y, Z) :-
+    |	Z=Y.

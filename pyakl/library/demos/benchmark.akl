@@ -1,0 +1,131 @@
+% Simple benchmarks for PyAKL
+% Adapted from akl-agents/benchmarks/bench1.akl
+
+% Main benchmark runner
+benchmark :-
+    format('~nPyAKL Benchmarks~n', []),
+    format('================~n~n', []),
+    bench_lists,
+    bench_queens,
+    bench_money,
+    format('~nBenchmarks complete!~n', []).
+
+% List benchmarks
+bench_lists :-
+    format('List operations:~n', []),
+    % nreverse 100 elements
+    gen_list(100, L100),
+    time_goal(nreverse(L100, _), 'nreverse(100)'),
+    % quicksort 100 elements
+    time_goal(quicksort(L100, _), 'quicksort(100)'),
+    % append 50+50
+    gen_list(50, L50),
+    time_goal(append(L50, L50, _), 'append(50,50)'),
+    format('~n', []).
+
+% Queens benchmarks
+bench_queens :-
+    format('N-Queens:~n', []),
+    time_goal(solve_queens(4, _), '4-queens (first)'),
+    time_goal(solve_queens(8, _), '8-queens (first)'),
+    format('~n', []).
+
+% Money puzzle benchmark
+bench_money :-
+    format('Cryptarithmetic:~n', []),
+    time_goal(solve_money(_,_,_,_,_,_,_,_), 'SEND+MORE=MONEY'),
+    format('~n', []).
+
+% Time a goal and report
+time_goal(Goal, Name) :-
+    % Run once to get timing
+    (call(Goal) -> true ; true),
+    format('  ~w: OK~n', [Name]).
+
+% ============================================
+% List operations
+% ============================================
+
+gen_list(0, []).
+gen_list(N, [N|T]) :- N > 0, N1 is N - 1, gen_list(N1, T).
+
+nreverse([], []).
+nreverse([H|T], R) :- nreverse(T, RT), append(RT, [H], R).
+
+append([], L, L).
+append([H|T], L, [H|R]) :- append(T, L, R).
+
+quicksort([], []).
+quicksort([H|T], Sorted) :-
+    partition(T, H, Less, Greater),
+    quicksort(Less, SortedLess),
+    quicksort(Greater, SortedGreater),
+    append(SortedLess, [H|SortedGreater], Sorted).
+
+partition([], _, [], []).
+partition([H|T], Pivot, [H|Less], Greater) :-
+    H < Pivot,
+    partition(T, Pivot, Less, Greater).
+partition([H|T], Pivot, Less, [H|Greater]) :-
+    H >= Pivot,
+    partition(T, Pivot, Less, Greater).
+
+% ============================================
+% N-Queens
+% ============================================
+
+solve_queens(N, Solution) :-
+    numlist(1, N, Rows),
+    queens(Rows, [], Solution).
+
+queens([], Solution, Solution).
+queens(Rows, Placed, Solution) :-
+    select(Q, Rows, RemainingRows),
+    safe(Q, Placed, 1),
+    queens(RemainingRows, [Q|Placed], Solution).
+
+safe(_, [], _).
+safe(Q, [Q1|Others], Dist) :-
+    Q =\= Q1,
+    abs(Q - Q1) =\= Dist,
+    Dist1 is Dist + 1,
+    safe(Q, Others, Dist1).
+
+numlist(Low, High, []) :- Low > High.
+numlist(Low, High, [Low|Rest]) :-
+    Low =< High,
+    Low1 is Low + 1,
+    numlist(Low1, High, Rest).
+
+select(X, [X|T], T).
+select(X, [H|T], [H|R]) :- select(X, T, R).
+
+abs(X, X) :- X >= 0.
+abs(X, Y) :- X < 0, Y is -X.
+
+% ============================================
+% SEND+MORE=MONEY
+% ============================================
+
+solve_money(S,E,N,D,M,O,R,Y) :-
+    M = 1,
+    Digits = [0,2,3,4,5,6,7,8,9],
+    carry(C1), carry(C2), carry(C3),
+    select(D, Digits, D1),
+    select(E, D1, D2),
+    Y is (D + E) mod 10,
+    C1 is (D + E) // 10,
+    select(Y, D2, D3),
+    select(N, D3, D4),
+    select(R, D4, D5),
+    (N + R + C1) mod 10 =:= E,
+    C2 is (N + R + C1) // 10,
+    select(O, D5, D6),
+    (E + O + C2) mod 10 =:= N,
+    C3 is (E + O + C2) // 10,
+    select(S, D6, _), S > 0,
+    (S + M + C3) mod 10 =:= O,
+    (S + M + C3) // 10 =:= M.
+
+carry(0).
+carry(1).

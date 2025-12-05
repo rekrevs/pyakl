@@ -1,0 +1,29 @@
+%$Id: qsort.akl,v 1.2 1991/05/30 15:18:29 jm Exp $
+
+demo(N):- 
+	statistics(runtime,_), 
+	list(N,L), 
+	qsort(L,S,[]), !, 
+	statistics(runtime,[_,T]), 
+	format("Solved in ~w msec. ~n", [T]).
+
+
+list(0, L) :- !, L=[].
+list(N, L) :- !,
+	L = [N|L1],
+	N1 is N-1,
+	list(N1,L1).
+
+qsort([],L,L1) :- !, L=L1.
+qsort([E|R],L,L1) :- !,
+	partition(R,E,Left,Right),
+	qsort(Left,L,[E|L2]),
+	qsort(Right,L2,L1).
+
+partition([], _, Left, Right) :- !, Left = [], Right = [].
+partition([E|R], C, Left, Right) :- E < C, !,
+	Left = [E|Left1],
+	partition(R, C, Left1, Right).
+partition([E|R], C, Left, Right) :- !,
+	Right = [E|Right1],
+	partition(R, C, Left, Right1).

@@ -1,0 +1,32 @@
+% Meta-Interpreter for the AKL
+% by Sverker Janson, 1990
+
+prove(true):- | true.
+prove((P,Q)) :- | prove(P), prove(Q).
+prove(X=Y) :- | X = Y.
+prove(G) :- guard(G, wait) |  wait_prove(G).
+prove(G) :- guard(G, conditional) |  conditonal_prove(G).
+prove(G) :- guard(G, commit) |  commit_prove(G).
+
+
+wait_prove(A):- clause(A,G,B), prove(G) ? prove(B).
+
+conditional_prove(A):- clause(A,G,B), prove(G) -> prove(B).
+
+commit_prove(A):- clause(A,G,B), prove(G) | prove(B).
+
+
+% nreverse([],R) :- | R = [].
+% nreverse([],R) :- | nreverse(T,RT), app(Rt,[H],R).
+
+% app([],Y,Z) :- ? R = [].
+% app([H|T],Y,Z) :- ? Z = [H|R], app(T,Y,R).
+
+guard(nreverse(_,_),commit) :- | true.
+guard(app(_,_,_),wait) :- | true.
+
+clause(nreverse([],R), true, R = []).
+clause(nreverse([H|T],R), true, (nreverse(T,RT),app(RT,[H],R))).
+
+clause(app([],Y,Z), true,  Y = Z).
+clause(app([H|T],Y,Z), true, (Z = [H|R], app(T,Y,R))).

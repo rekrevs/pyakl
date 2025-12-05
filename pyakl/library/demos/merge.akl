@@ -1,0 +1,4 @@
+merge([],Y,Z) :- | Y=Z.
+merge([E|X],Y,Z) :- | Z=[E|Z1], merge(X,Y,Z1).
+merge(X,[],Z) :- | X=Z.
+merge(X,[E|Y],Z) :- | Z=[E|Z1], merge(X,Y,Z1).

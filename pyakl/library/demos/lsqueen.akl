@@ -1,0 +1,65 @@
+/*-----------------------------------------------------------------------------
+Program: N-Queens (layered-streams with no nil-check)
+Author:  E. Tick
+Date:    June 25 1989
+
+Notes:
+1. To run:
+    ?- go(M,N).
+where input M is size of board and output N is the number of solutions.
+-----------------------------------------------------------------------------*/
+
+go(M,N) :-
+	queen(1,M,begin,A),
+	fromLStoL(A,B),
+	count(B,N).
+
+queen(I,N,In,Out) :-
+	I =< N, I1 is I+1
+    ->	q(1,N,In,In1),
+	queen(I1,N,In1,Out).
+queen(I,N,In,Out) :-
+	I > N
+    ->	Out = In.
+
+q(I,N,In,Out) :- I =< N, I1 is I+1 |
+    Out = [[I|In1]|Out1], 
+    filter(In,I,1,In1), 
+    q(I1,N,In,Out1).
+q(I,N,_,Out) :- I > N | Out = [].
+
+filter(begin,_,_,Out) :-
+    ->	Out = begin.
+filter([],_,_,Out) :-
+    ->	Out = [].
+filter([[J|In]|Ins],I,K,Out) :-
+	J =\= I,
+	J1 is J-I,
+	J1 =\= K,
+	J2 is I-J,
+	J2 =\= K,
+	K1 is K+1
+    ->	Out = [[J|NewIn]|Out1],
+    	filter(In,I,K1,NewIn),
+    	filter(Ins,I,K,Out1).
+filter([_|Ins],I,K,Out) :-
+    ->	filter(Ins,I,K,Out).
+
+fromLStoL(LayeredStream,List) :- 
+	fromLStoS(LayeredStream,[],List,[]).
+
+fromLStoS(begin,Stack,L0,L1) :-
+    ->	L0=[Stack|L1].
+fromLStoS([],_,L0,L1) :-
+    ->	L0=L1.
+fromLStoS([[A|LS1]|Rest],Stack, L0, L2) :-
+    ->	fromLStoS(LS1,[A|Stack], L0, L1),
+	fromLStoS(Rest,Stack, L1,L2).
+
+count(L,N) :- count(L,0,N).
+
+count([_|Xs],M,N) :-
+    ->	M1 is M+1,
+	count(Xs,M1,N).
+count([],M,N) :-
+    ->	M = N.

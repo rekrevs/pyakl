@@ -1,0 +1,87 @@
+% N-Queens problem
+% Place N queens on an NxN board so no two attack each other
+
+% queens/1 - solve N-queens and display solution
+queens(N) :-
+    format('~w-Queens puzzle~n~n', [N]),
+    numlist(1, N, Rows),
+    queens(Rows, [], Solution),
+    display_board(N, Solution),
+    format('~nSolution: ~w~n', [Solution]).
+
+% queens/3 - place queens row by row
+queens([], Solution, Solution).
+queens(Rows, Placed, Solution) :-
+    select(Q, Rows, RemainingRows),
+    safe(Q, Placed, 1),
+    queens(RemainingRows, [Q|Placed], Solution).
+
+% safe/3 - check if placing queen at Q is safe
+safe(_, [], _).
+safe(Q, [Q1|Others], Dist) :-
+    Q =\= Q1,
+    abs(Q - Q1) =\= Dist,
+    Dist1 is Dist + 1,
+    safe(Q, Others, Dist1).
+
+% numlist/3 - generate list [Low, Low+1, ..., High]
+numlist(Low, High, []) :- Low > High.
+numlist(Low, High, [Low|Rest]) :-
+    Low =< High,
+    Low1 is Low + 1,
+    numlist(Low1, High, Rest).
+
+% select/3 - select element from list
+select(X, [X|T], T).
+select(X, [H|T], [H|R]) :- select(X, T, R).
+
+% abs/2 - absolute value (as a relation)
+abs(X, X) :- X >= 0.
+abs(X, Y) :- X < 0, Y is -X.
+
+% display_board/2 - display the board
+display_board(N, Solution) :-
+    reverse(Solution, RevSol),
+    display_rows(N, RevSol, 1).
+
+display_rows(_, [], _).
+display_rows(N, [Q|Qs], Row) :-
+    display_row(N, Q),
+    format('~n', []),
+    Row1 is Row + 1,
+    display_rows(N, Qs, Row1).
+
+display_row(N, Q) :-
+    display_cells(1, N, Q).
+
+display_cells(I, N, _) :- I > N.
+display_cells(I, N, Q) :-
+    I =< N,
+    display_cell(I, Q),
+    I1 is I + 1,
+    display_cells(I1, N, Q).
+
+display_cell(I, Q) :- I =:= Q, format(' Q', []).
+display_cell(I, Q) :- I =\= Q, format(' .', []).
+
+% reverse/2 - reverse a list
+reverse(L, R) :- reverse(L, [], R).
+reverse([], Acc, Acc).
+reverse([H|T], Acc, R) :- reverse(T, [H|Acc], R).
+
+% Test predicates
+test_queens_4 :-
+    format('Testing 4-Queens...~n', []),
+    queens(4),
+    format('~n4-Queens test passed!~n', []).
+
+test_queens_8 :-
+    format('Testing 8-Queens...~n', []),
+    queens(8),
+    format('~n8-Queens test passed!~n', []).
+
+% Count all solutions
+count_solutions(N, Count) :-
+    findall(S, (numlist(1,N,R), queens(R,[],S)), Solutions),
+    length(Solutions, Count),
+    format('~w-Queens has ~w solutions~n', [N, Count]).

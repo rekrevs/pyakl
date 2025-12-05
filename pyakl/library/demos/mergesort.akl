@@ -1,0 +1,79 @@
+/* $Id: mergesort.akl,v 1.5 1993/02/17 21:42:42 sverker Exp $ */
+
+%   Author : Richard A. O'Keefe
+%   Updated: 1 June 84 (July 90 by matsc)
+%   Purpose: a sorting routine which exploits existing order
+
+/*  Adapted from shared code written by the same author; all changes */
+/*  Copyright (C) 1988, Swedish Institute of Computer Science. */
+
+/*  Adapted for the AKL by Johan Montelius. */
+
+%   Sorting.  Adapted from O'Keefe's code, but uses recursion instead of
+%   an auxiliary stack.  Takes care to check validity of arguments.
+
+sort(List, Sorted) :-
+	sort(List, -1, S, []) !
+	Sorted = S.
+
+sort([Head|Tail], Lim, Sorted, Rest) :- !
+	Qh = [Head|_],
+	samrun(Tail, Qh, Qh, Run, Rest0),
+	sort(Rest0, 1, Lim, Run, Sorted, Rest).
+sort(Rest, _, [], Rest):- ! true.
+
+sort([Head|Tail], J, Lim, Run0, Sorted, Rest) :-
+	int_not_equal(J, Lim) !
+	Qh = [Head|_],
+	samrun(Tail, Qh, Qh, Run1, Rest0),
+	sort(Rest0, 1, J, Run1, Run2, Rest1),
+	merge(Run0, Run2, Run),
+	K is J<<1,
+	sort(Rest1, K, Lim, Run, Sorted, Rest).
+sort(Rest, _, _, Sorted, Sorted, Rest):- ! true.
+
+
+% samrun(List, Q1, Q2, Run, Rest)
+
+% List is a list of elements, Rest is some tail of that list,
+% Run is an ordered _set_ of the difference between List and Rest,
+% Q1 is the cons containing the first element of List.
+% Q2 is the last cons of Run.
+
+
+samrun([H|Tail], QH, QT, Run, Rest) :-
+	QT = [Q|_],
+	compare(X, H, Q),
+	samrunt(X, H, QH, QT, QH1, QT1) !
+        samrun(Tail, QH1, QT1, Run, Rest).
+samrun(Rest, Run, [_], Run, Rest):- ! true.
+
+samrunh(<, H, QH, [H|QH]).
+samrunh(=, _, QH, QH).
+
+samrunt(<, H, QH, QT, QH1, QT) :-
+	QH = [Q|_],
+	compare(X, H, Q),
+	samrunh(X, H, QH, QH1).
+samrunt(=, _, QH, QT, QH, QT).
+samrunt(>, H, QH, [_|QT], QH, QT) :-
+	QT = [H|_].
+
+% merge(+List, +List, -List).
+merge([], Set0, Set) :- !
+	Set = Set0.
+merge([O|Os], [N|Ns], Set) :- !
+	compare(C, O, N), 
+	merge(C, O, Os, N, Ns, Set).
+merge(Set, _, Set):- ! true.
+
+merge(<, O, [], N, Ns, [O,N|Ns]) :- ! true.
+merge(<, O1, [O|Os], N, Ns, [O1|Set]) :- !
+	compare(C, O, N), 
+	merge(C, O, Os, N, Ns, Set).
+merge(=, _, Os, N, Ns, [N|Set]) :- !
+	merge(Os, Ns, Set).
+merge(>, O, Os, N, [], [N,O|Os]) :- ! true.
+merge(>, O, Os, N1, [N|Ns], [N1|Set]) :- !
+	compare(C, O, N), 
+	merge(C, O, Os, N, Ns, Set).

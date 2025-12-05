@@ -1,0 +1,60 @@
+% Quicksort for PyAKL
+% Adapted from akl-agents/demos/qsort.akl
+
+% quicksort/2 - sort a list
+quicksort([], []).
+quicksort([H|T], Sorted) :-
+    partition(T, H, Less, Greater),
+    quicksort(Less, SortedLess),
+    quicksort(Greater, SortedGreater),
+    append(SortedLess, [H|SortedGreater], Sorted).
+
+% partition/4 - split list around pivot
+partition([], _, [], []).
+partition([H|T], Pivot, [H|Less], Greater) :-
+    H < Pivot,
+    partition(T, Pivot, Less, Greater).
+partition([H|T], Pivot, Less, [H|Greater]) :-
+    H >= Pivot,
+    partition(T, Pivot, Less, Greater).
+
+% append/3 for quicksort
+append([], L, L).
+append([H|T], L, [H|R]) :- append(T, L, R).
+
+% Helper to generate a list [N, N-1, ..., 1]
+gen_list(0, []).
+gen_list(N, [N|T]) :- N > 0, N1 is N - 1, gen_list(N1, T).
+
+% Test quicksort
+test_qsort :-
+    format('Testing quicksort...~n', []),
+
+    % Simple test
+    quicksort([3,1,4,1,5,9,2,6], Sorted1),
+    format('  [3,1,4,1,5,9,2,6] -> ~w~n', [Sorted1]),
+
+    % Already sorted
+    quicksort([1,2,3,4,5], Sorted2),
+    Sorted2 = [1,2,3,4,5],
+    format('  [1,2,3,4,5] -> ~w (already sorted)~n', [Sorted2]),
+
+    % Reverse sorted
+    quicksort([5,4,3,2,1], Sorted3),
+    Sorted3 = [1,2,3,4,5],
+    format('  [5,4,3,2,1] -> ~w~n', [Sorted3]),
+
+    % Empty
+    quicksort([], []),
+    format('  [] -> [] (empty)~n', []),
+
+    % Single element
+    quicksort([42], [42]),
+    format('  [42] -> [42] (single)~n', []),
+
+    % Larger test
+    gen_list(20, L),
+    quicksort(L, SortedL),
+    format('  [20,19,...,1] sorted OK~n', []),
+
+    format('~nQuicksort tests passed!~n', []).

@@ -1,0 +1,46 @@
+% look works as in prolog
+
+look(W):-  
+	lookup(a(1),W),
+	lookup(b(2),W),
+	lookup(a(X),W),
+	lookup(c(X),W).
+
+lookup(Item, [Item|_]):- ! true.
+lookup(Item, [_|R]):- ! lookup(Item,R).
+
+% observe how look2 will suspend since lookup2 must be quiet
+
+look2(W):-  
+	lookup2(a(1),W),
+	lookup2(b(2),W),
+	lookup2(a(X),W),
+	lookup2(c(X),W).
+
+
+lookup2(Item, [Item|_]):- -> true.
+lookup2(Item, [_|R]):- -> lookup2(Item,R).
+
+% in look3 W is bound and the lookup2 processes can proceed
+
+look3(W):-  
+	lookup2(a(1),W),
+	lookup2(b(2),W),
+	lookup2(a(1),W),
+	lookup2(c(1),W),
+	W = [a(1),c(1),b(2)].
+
+% in lookup4 we allow only one value for each key, 
+% the value can be produced deterministic given a 
+% key.
+
+look4(W):-
+	lookup3(item(a,1),W),
+	lookup3(item(b,2),W),
+	lookup3(item(a,Value),W),
+	lookup3(item(c,Value),W).
+
+
+lookup3(item(Key,Value),[item(Key,Y)|_]):- ! Value = Y.
+lookup3(Item, [_|R]):- ! lookup3(Item,R).
+

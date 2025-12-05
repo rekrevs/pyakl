@@ -1,0 +1,55 @@
+% SEND + MORE = MONEY cryptarithmetic puzzle
+% Using column-by-column constraint propagation
+
+% money/0 - solve and display the puzzle
+money :-
+    format('SEND + MORE = MONEY puzzle~n~n', []),
+    solve(S,E,N,D,M,O,R,Y),
+    format('     ~w~w~w~w~n', [S,E,N,D]),
+    format('  +  ~w~w~w~w~n', [M,O,R,E]),
+    format('  -------~n', []),
+    format('   ~w~w~w~w~w~n', [M,O,N,E,Y]),
+    SEND is S*1000 + E*100 + N*10 + D,
+    MORE is M*1000 + O*100 + R*10 + E,
+    MONEY is M*10000 + O*1000 + N*100 + E*10 + Y,
+    format('~nSolution: ~w + ~w = ~w~n', [SEND, MORE, MONEY]).
+
+% solve/8 - use carry-based approach for efficiency
+solve(S,E,N,D,M,O,R,Y) :-
+    M = 1,  % M must be 1 (carry from thousands)
+    Digits = [0,2,3,4,5,6,7,8,9],  % 1 is taken by M
+    % Column by column with carries
+    carry(C1), carry(C2), carry(C3),
+    % D + E = Y + 10*C1
+    select(D, Digits, D1),
+    select(E, D1, D2),
+    Y is (D + E) mod 10,
+    C1 is (D + E) // 10,
+    select(Y, D2, D3),
+    % N + R + C1 = E + 10*C2 (E already chosen)
+    select(N, D3, D4),
+    select(R, D4, D5),
+    (N + R + C1) mod 10 =:= E,
+    C2 is (N + R + C1) // 10,
+    % E + O + C2 = N + 10*C3 (E,N already chosen)
+    select(O, D5, D6),
+    (E + O + C2) mod 10 =:= N,
+    C3 is (E + O + C2) // 10,
+    % S + M + C3 = O + 10*M (M,O already chosen)
+    select(S, D6, _), S > 0,
+    (S + M + C3) mod 10 =:= O,
+    (S + M + C3) // 10 =:= M.
+
+% carry/1 - generate 0 or 1
+carry(0).
+carry(1).
+
+% select/3 - select an element from a list
+select(X, [X|T], T).
+select(X, [H|T], [H|R]) :- select(X, T, R).
+
+% Test predicate
+test_money :-
+    format('Solving SEND + MORE = MONEY...~n', []),
+    money,
+    format('~nTest passed!~n', []).

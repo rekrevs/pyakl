@@ -1,0 +1,22 @@
+% COMMON SUBLISTS
+
+% Horn clauses
+
+sublist([],[]).
+sublist([E|X],[E|Y]) :- sublist(X,Y).
+sublist(X,[_|Y]) :- sublist(X,Y).
+
+% ?- sublist(X,[c,a,t,s]), sublist(X,[l,a,s,t]).
+
+% Andorra - We may choose to enumerate all solutions separately
+% as in the above, but we may also generate solutions down to some
+% level at which global forking is performed.  To illustrate the point
+% we generate only the first element of the sublist before the
+% two are combined.  In the case that these elements are different,
+% no (apparently) redundant work will be performed.
+
+sub([],_).
+sub([E|X],Y) :- suffix([E|Z],Y) ? sub(X,Z).
+
+suffix(X,X).
+suffix(X,[_|Y]) :- suffix(X,Y).

@@ -1,0 +1,122 @@
+% qa.akl - PyAKL REPL
+% Adapted from akl-agents/environment/qa.akl
+%
+% Simplified version for current interpreter capabilities.
+
+% Main entry point
+main :-
+    stdout(Out),
+    stdin(In),
+    format('PyAKL REPL~n', []),
+    format('Type halt. to exit~n~n', []),
+    fflush(Out),
+    qaloop(In, Out).
+
+% Main loop - read and handle commands
+qaloop(In, Out) :-
+    format('| ?- ', []),
+    fflush(Out),
+    read_term(In, Result),
+    qaprocess(Result, In, Out).
+
+% Process EOF - exit
+qaprocess(exception(end_of_file), _In, Out) :-
+    format('~n', []),
+    fflush(Out).
+
+% Process parse error
+qaprocess(exception(Error), In, Out) :-
+    Error \= end_of_file,
+    format('{Error: ~w}~n', [Error]),
+    fflush(Out),
+    qaloop(In, Out).
+
+% Process halt command
+qaprocess(term(halt), _In, Out) :-
+    format('~n', []),
+    fflush(Out).
+
+% Process regular query
+qaprocess(term(Query), In, Out) :-
+    Query \= halt,
+    qaquery(Query, In, Out),
+    qaloop(In, Out).
+
+% Execute a query using reflection
+qaquery(Query, In, Out) :-
+    reflective_call(W, Query, S),
+    qareport(S, W, In, Out).
+
+% Report: fail
+qareport([fail|_], _W, _In, Out) :-
+    format('~nno~n', []),
+    fflush(Out).
+
+% Report: suspended (not fully supported yet)
+qareport([suspended|_], W, _In, Out) :-
+    format('~n{Computation suspended}~n', []),
+    reflective_print(W, _),
+    format('no~n', []),
+    fflush(Out).
+
+% Report: solution found
+qareport([solution(Vs)|R], W, In, Out) :-
+    qaanswers(Vs, Next, In, Out),
+    qamore(Next, R, W, In, Out).
+
+% Display no bindings
+qaanswers([], no, _In, Out) :-
+    format('~ntrue', []),
+    fflush(Out).
+
+% Display bindings
+qaanswers(Vs, Next, In, Out) :-
+    Vs = [_|_],
+    format('~n', []),
+    qaanswer_list(Vs, Out),
+    format(' ? ', []),
+    fflush(Out),
+    getc(In, C),
+    qanext(C, Next, In).
+
+% Print binding list
+qaanswer_list([], _Out).
+qaanswer_list([Name = Val], Out) :-
+    format('~w = ~q', [Name, Val]),
+    fflush(Out).
+qaanswer_list([Name = Val, B|Bs], Out) :-
+    qaanswer_list([B|Bs], Out),
+    format(',~n~w = ~q', [Name, Val]),
+    fflush(Out).
+
+% Determine what to do based on input character
+% Newline alone = stop, anything else = read until newline then continue
+qanext(10, no, _In).    % Newline - stop
+qanext(-1, err, _In).   % EOF - error
+qanext(C, Next, In) :-  % Anything else - read rest of line
+    C \= 10,
+    C \= -1,
+    getc(In, C2),
+    qarest(C2, Next, In).
+
+% Read rest of line after initial non-newline character
+qarest(10, next, _In).  % Newline - done, continue to next solution
+qarest(-1, err, _In).   % EOF - error
+qarest(C, Next, In) :-  % More chars - keep reading
+    C \= 10,
+    C \= -1,
+    getc(In, C2),
+    qarest(C2, Next, In).
+
+% Handle more solutions request
+qamore(err, _, _, _In, Out) :-
+    format('~n{Exception while reading}~n', []),
+    fflush(Out).
+
+qamore(no, _, _, _In, Out) :-
+    format('~nyes~n', []),
+    fflush(Out).
+
+qamore(next, S, W, In, Out) :-
+    reflective_next(W, W1),
+    qareport(S, W1, In, Out).

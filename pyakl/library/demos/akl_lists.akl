@@ -1,0 +1,92 @@
+% $Id: lists.akl,v 1.12 1994/01/09 10:16:27 sverker Exp $
+%
+
+time(X) :-
+	statistics(runtime,[T0|_]),
+	call(X)
+    !	statistics(runtime,[T1|_]),
+	T is T1-T0,
+	format('~w msec.~n', [T]).
+
+
+nreverse(N):- 
+	list(N,L), 
+	time(nreverse(L, _)).
+
+
+freverse(N):- 
+	flist(N,L), 
+	time(nreverse(L, _)).
+
+
+reverse(N):- 
+	list(N,L), 
+	time(reverse(L,[],_R)).
+
+
+reverse([],A,R):-
+    ->	R = A.
+reverse([H|T],A,R):-
+    ->	reverse(T,[H|A],R).
+
+
+nreverse([],R):-
+    ->	R = [].
+nreverse([H|T],R):-
+    ->	nreverse(T,RT),
+	c(RT,[H],R).
+
+c([X|Xs], Ys, Zs) :-
+    ->	Zs = [X|Ws],
+	c(Xs, Ys, Ws).
+c([], Ys, Zs) :-
+    ->	Zs = Ys.
+
+qsort(N):- 
+	integer(N)
+    ->	list(N,L), 
+	time(qsort(L,_,[])).
+qsort(mini) :-
+    ->	minidata(L),
+	time(qsort(L,_,[])).
+qsort(medi) :-
+    ->	medidata(L),
+	time(qsort(L,_,[])).
+qsort(maxi) :-
+    ->	maxidata(L),
+	time(qsort(L,_,[])).
+
+
+qsort([],L,L1) :-
+    ->	L=L1.
+qsort([E|R],L,L1) :-
+    ->	partition(R,E,Left,Right),
+	qsort(Left,L,[E|L2]),
+	qsort(Right,L2,L1).
+
+partition([E|R], C, Left, Right) :-
+	E < C
+    ->	Left = [E|Left1],
+	partition(R, C, Left1, Right).
+partition([E|R], C, Left, Right) :-
+    ->	Right = [E|Right1],
+	partition(R, C, Left, Right1).
+partition([], _, Left, Right) :-
+    ->	Left = [],
+	Right = [].
+
+
+list(0, L) :-
+    ->	L=[].
+list(N, L) :-
+    ->	L = [N|L1],
+	N1 is N - 1,
+	list(N1,L1).
+
+
+flist(0.0, L) :-
+    -> L = [].
+flist(F, L):-
+    -> L = [F|L1],
+       F1 is F-1.0,
+       flist(F1, L1).

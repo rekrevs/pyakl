@@ -1,0 +1,62 @@
+/*-----------------------------------------------------------------------------
+Program:  N-Queens (candidates/noncandidates)
+Author:   K. Kumon 
+Modified: E. Tick
+Date:     July 9 1989
+
+Notes:
+1. To run:
+    ?- go(N,M).
+
+for N = 9, should print M = 352.
+-----------------------------------------------------------------------------*/
+
+go(N,M) :-  
+    gen(N,L),
+    queen(L,[],[],X,[]), 
+    count(X, M).
+
+queen([P|U], C, L, I0, I2):-
+    ->	check(L, P, 1, U,C, L, I0, I1),    
+	queen(U, [P|C], L, I1, I2).            
+queen([], [], L, I, O):-
+    ->	I=[L|O].
+queen([], [_|_], _, I, O):-
+    ->	I=O.
+
+check([],    T, _D, U,C, B, I, O):-
+    ->	concat(U, C, N), 
+	queen(N, [], [T|B], I, O).
+check([P|R], T, D, U,C, B, I, O):- 
+	T1 is P+D,
+	T =\= T1, 
+	T2 is P-D,
+	T =\= T2,
+	D1 is D+1
+    ->	check(R, T, D1, U,C, B, I, O).
+check(_,_,_,_,_,_,I,O) :-
+    ->	I=O.
+
+gen(N, X) :- 
+	N > 0
+    ->	X = [N|Xs],
+	M is N-1,
+	gen(M,Xs).
+gen(N, X) :-
+	N = 0
+    ->	X = [].
+                            
+count(L,N) :-
+	count(L,0,N).
+
+count([],M,N) :-
+    ->	M = N.
+count([_|Xs],M,N) :-
+    ->	M1 is M+1,
+	count(Xs,M1,N).
+
+concat([A|X1],Y,Z) :-
+    ->	Z = [A|Z1],
+	concat(X1,Y,Z1).
+concat([],    Y,Z) :-
+    ->	Z = Y.

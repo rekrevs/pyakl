@@ -1,0 +1,122 @@
+% Basic tests for PyAKL
+% Adapted from akl-agents/tests/agents.tests/old_test.akl
+
+test_types :-
+    atom(foo),
+    integer(19),
+    float(1.4),
+    atomic(19),
+    atomic(foo),
+    atomic(1.4),
+    compound(f(19)),
+    compound([1]),
+    var(X), X = bound, nonvar(X),
+    format('Types: OK~n', []).
+
+test_atom_compare :-
+    foo == foo,
+    a \== b,
+    b @> a,
+    a @>= a,
+    a @=< a,
+    b @>= a,
+    a @=< b,
+    compare('=', foo, foo),
+    compare('<', a, b),
+    compare('>', b, a),
+    format('Atom compare: OK~n', []).
+
+test_functor_compare :-
+    [a] == [a],
+    [a] \== [b],
+    foo(1) == foo(1),
+    a(1) @< a(1,2),
+    a(1,2) @> a(1),
+    a(1) @< b(1),
+    b(1) @> a(1),
+    a(1,2) @>= a(1),
+    a(1) @=< a(1,2),
+    b(1) @>= a(1),
+    a(1) @=< b(1),
+    a(1) @>= a(1),
+    a(1) @=< a(1),
+    [1] @>= [1],
+    [1] @=< [1],
+    compare('=', [a], [a]),
+    compare('=', foo(1), foo(1)),
+    compare('<', a(1), a(1,2)),
+    compare('>', a(1,2), a(1)),
+    compare('<', a(1), b(1)),
+    compare('>', b(1), a(1)),
+    format('Functor compare: OK~n', []).
+
+test_term_manipulation :-
+    functor(a(1,2), a, 2),
+    functor([a], '.', 2),
+    arg(1, foo(42), 42),
+    arg(1, [a], a),
+    arg(2, [a], []),
+    format('Term manipulation: OK~n', []).
+
+test_integer_arith :-
+    1 is 1,
+    2 is 1 + 1,
+    1 is 2 - 1,
+    4 is 2 * 2,
+    2 is 9 // 4,
+    1 is 9 mod 4,
+    format('Integer arith: OK~n', []).
+
+test_integer_compare :-
+    1 =:= 1,
+    1 =\= 2,
+    1 < 2,
+    2 > 1,
+    1 >= 1,
+    1 =< 1,
+    2 >= 1,
+    1 =< 2,
+    compare('=', 1, 1),
+    compare('<', 1, 2),
+    compare('>', 2, 1),
+    format('Integer compare: OK~n', []).
+
+test_float_compare :-
+    1.0 =:= 1.0,
+    1.0 =\= 2.0,
+    1.0 < 2.0,
+    2.0 > 1.0,
+    1.0 >= 1.0,
+    1.0 =< 1.0,
+    2.0 >= 1.0,
+    1.0 =< 2.0,
+    compare('=', 1.0, 1.0),
+    compare('<', 1.0, 2.0),
+    compare('>', 2.0, 1.0),
+    format('Float compare: OK~n', []).
+
+test_mixed_compare :-
+    1 =:= 1.0,
+    1 =\= 2.0,
+    1 < 2.0,
+    2.0 > 1,
+    1 >= 1.0,
+    1 =< 1.0,
+    2.0 >= 1,
+    1 =< 2.0,
+    1 \== 1.0,
+    1.0 \== 1,
+    format('Mixed compare: OK~n', []).
+
+% Run all tests
+test :-
+    format('~nRunning basic tests...~n~n', []),
+    test_types,
+    test_atom_compare,
+    test_functor_compare,
+    test_term_manipulation,
+    test_integer_arith,
+    test_integer_compare,
+    test_float_compare,
+    test_mixed_compare,
+    format('~nAll basic tests passed!~n', []).

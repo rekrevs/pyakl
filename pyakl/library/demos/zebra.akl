@@ -1,0 +1,83 @@
+% The Zebra Puzzle (Einstein's Riddle)
+% Simplified version for PyAKL
+%
+% There are five houses in a row, each of different color, inhabited by
+% people of different nationalities, with different pets, drinks, and cigarettes.
+
+zebra :-
+    format('The Zebra Puzzle~n================~n~n', []),
+    format('Who owns the zebra? Who drinks water?~n~n', []),
+    solve(Zebra, Water),
+    format('The ~w owns the zebra.~n', [Zebra]),
+    format('The ~w drinks water.~n', [Water]).
+
+solve(ZebraOwner, WaterDrinker) :-
+    % Each house has: [Color, Nationality, Pet, Drink, Cigarette]
+    Houses = [H1, H2, H3, H4, H5],
+
+    % The Englishman lives in the red house
+    member([red, englishman, _, _, _], Houses),
+
+    % The Spaniard owns the dog
+    member([_, spaniard, dog, _, _], Houses),
+
+    % Coffee is drunk in the green house
+    member([green, _, _, coffee, _], Houses),
+
+    % The Ukrainian drinks tea
+    member([_, ukrainian, _, tea, _], Houses),
+
+    % The green house is immediately to the right of the ivory house
+    right_of([green, _, _, _, _], [ivory, _, _, _, _], Houses),
+
+    % The Old Gold smoker owns snails
+    member([_, _, snails, _, old_gold], Houses),
+
+    % Kools are smoked in the yellow house
+    member([yellow, _, _, _, kools], Houses),
+
+    % Milk is drunk in the middle house
+    H3 = [_, _, _, milk, _],
+
+    % The Norwegian lives in the first house
+    H1 = [_, norwegian, _, _, _],
+
+    % The Chesterfields smoker lives next to the man with the fox
+    next_to([_, _, _, _, chesterfields], [_, _, fox, _, _], Houses),
+
+    % Kools are smoked next to the house where the horse is kept
+    next_to([_, _, _, _, kools], [_, _, horse, _, _], Houses),
+
+    % The Lucky Strike smoker drinks orange juice
+    member([_, _, _, orange_juice, lucky_strike], Houses),
+
+    % The Japanese smokes Parliaments
+    member([_, japanese, _, _, parliaments], Houses),
+
+    % The Norwegian lives next to the blue house
+    next_to([_, norwegian, _, _, _], [blue, _, _, _, _], Houses),
+
+    % Now find the zebra owner and water drinker
+    member([_, ZebraOwner, zebra, _, _], Houses),
+    member([_, WaterDrinker, _, water, _], Houses),
+
+    % Ensure all elements are properly bound
+    member(H1, Houses), member(H2, Houses), member(H3, Houses),
+    member(H4, Houses), member(H5, Houses).
+
+% right_of(A, B, List) - A is immediately to the right of B
+right_of(A, B, [B, A | _]).
+right_of(A, B, [_ | T]) :- right_of(A, B, T).
+
+% next_to(A, B, List) - A and B are adjacent
+next_to(A, B, List) :- right_of(A, B, List).
+next_to(A, B, List) :- right_of(B, A, List).
+
+% member/2
+member(X, [X|_]).
+member(X, [_|T]) :- member(X, T).
+
+test_zebra :-
+    format('Solving the Zebra puzzle...~n', []),
+    zebra,
+    format('~nTest passed!~n', []).

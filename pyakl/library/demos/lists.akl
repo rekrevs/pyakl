@@ -1,0 +1,62 @@
+% List operations for PyAKL
+% Adapted from akl-agents/demos/lists.akl
+
+% member/2 - check if element is in list
+member(X, [X|_]).
+member(X, [_|T]) :- member(X, T).
+
+% append/3 - append two lists
+append([], L, L).
+append([H|T], L, [H|R]) :- append(T, L, R).
+
+% length/2 - length of a list (already a builtin, but here's the relation)
+list_length([], 0).
+list_length([_|T], N) :- list_length(T, N1), N is N1 + 1.
+
+% reverse/2 - reverse a list using accumulator
+reverse(L, R) :- reverse(L, [], R).
+reverse([], Acc, Acc).
+reverse([H|T], Acc, R) :- reverse(T, [H|Acc], R).
+
+% naive reverse - O(n^2)
+nreverse([], []).
+nreverse([H|T], R) :- nreverse(T, RT), append(RT, [H], R).
+
+% last/2 - get last element
+last([X], X).
+last([_|T], X) :- last(T, X).
+
+% nth/3 - get nth element (1-indexed)
+nth(1, [H|_], H).
+nth(N, [_|T], X) :- N > 1, N1 is N - 1, nth(N1, T, X).
+
+% Test predicate
+test_lists :-
+    format('Testing list operations...~n', []),
+
+    % member
+    member(b, [a,b,c]),
+    \+ member(d, [a,b,c]),
+    format('  member/2: OK~n', []),
+
+    % append
+    append([1,2], [3,4], [1,2,3,4]),
+    format('  append/3: OK~n', []),
+
+    % reverse
+    reverse([1,2,3], [3,2,1]),
+    format('  reverse/2: OK~n', []),
+
+    % nreverse
+    nreverse([1,2,3], [3,2,1]),
+    format('  nreverse/2: OK~n', []),
+
+    % last
+    last([1,2,3], 3),
+    format('  last/2: OK~n', []),
+
+    % nth
+    nth(2, [a,b,c], b),
+    format('  nth/3: OK~n', []),
+
+    format('~nAll list tests passed!~n', []).

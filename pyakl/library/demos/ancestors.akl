@@ -1,0 +1,30 @@
+% COMMON ANCESTORS
+
+% Horn clauses
+
+ancestor(X,Y) :- parent(X,Y).
+ancestor(X,Y) :- parent(X,Z), ancestor(Z,Y).
+
+parent(a,ma).
+parent(a,fa).
+parent(b,mb).
+parent(b,fb).
+parent(fa,c).
+parent(mb,c).
+% ...
+
+test1(Z) :- ancestor(a, Z), ancestor(b, Z).
+
+% AKL
+%
+% Prolog would recalculate all ancestors of b for each
+% ancestor of a in the above.  In this case, this is not an overly
+% expensive operation, but it could be.  Therefore, we show how to
+% enumerate all solutions locally for each of the goals.
+
+anc(X,Y) :- ancestor(X,Y0) ? Y = Y0.
+
+% where anc/2 corrensponds to ancestor/2 above with the default
+% translation (H :- B => H :- true ? B).
+
+test2(Z) :- anc(a, Z), anc(b, Z).

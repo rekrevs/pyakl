@@ -1,0 +1,81 @@
+/*-----------------------------------------------------------------------------
+Program:  Pascal's Triangle 
+Author:   E. Tick
+Date:     July 25 1989
+
+Notes:
+1. To run:
+    ?- go(N,R).
+where input N is the number of rows to calculate and output R is the Nth row.
+-----------------------------------------------------------------------------*/
+
+go(N,Row) :- N>1 | makeRows(1,N,[],Row).
+
+makeRows(N,N,HalfRow,Row) :- 
+    Odd is N mod 2 |
+    fillout(Odd,[[1,0]|HalfRow],Row).
+makeRows(K,N,HalfRowK,Row) :- 
+    K1 is K+1,
+    Odd is K mod 2 |
+    makeRow([[1,0]|HalfRowK],Odd,HalfRowK1),
+    makeRows(K1,N,HalfRowK1,Row).
+
+
+makeRow([_],0,A) :- | A=[].
+makeRow([X],1,A) :- | A=[S],bigPlus(S,X,X).
+makeRow([X1,X2|Xs],Odd,A) :- |
+    A=[S|Ss],
+    bigPlus(S,X1,X2),
+    makeRow([X2|Xs],Odd,Ss).
+
+fillout(0,HalfRow,Row) :- | 
+    rev(HalfRow,[_|Rev]),
+    concat(HalfRow,Rev,Row).
+fillout(1,HalfRow,Row) :- | 
+    rev(HalfRow,Rev),
+    concat(HalfRow,Rev,Row).
+
+bigPlus(A,X,Y) :-  bigp(X,Y,A,0).
+
+bigp([X|Xs],[Y|Ys],A,C) :- 
+	T is X+Y+C
+    |	setc(T,A1,C1),
+    	A=[A1|As],
+    	bigp(Xs,Ys,As,C1).
+bigp([],[Y|Ys],A,C) :- 
+	T is Y+C
+    |   A=[A1|As],
+    	setc(T,A1,C1),
+    	bigp([],Ys,As,C1).
+bigp([X|Xs],[],A,C) :-
+	T is X+C
+    |   setc(T,A1,C1),
+    	A=[A1|As],
+    	bigp([],Xs,As,C1).
+bigp([],[],A,0) :-
+    |	A=[].
+bigp([],[],A,C) :-
+	C > 0 
+    |	A=[C].
+
+setc(T,A,C) :-
+	T < 100000
+    ->	C = 0,
+	A = T.
+setc(T,A,C) :-
+	R is T-100000
+    ->	C = 1,
+	A = R.
+
+rev(X,Y) :- rev(X,[],Y).
+
+rev([A|X],Y,Z) :-
+    ->	rev(X,[A|Y],Z).
+rev([],Y,Z) :-
+    ->	Y = Z. 
+
+concat([A|X1],Y,Z) :-
+    ->	Z = [A|Z1],
+	concat(X1,Y,Z1).
+concat([],Y,Z) :-
+    ->	Z = Y.
