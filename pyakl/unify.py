@@ -158,6 +158,48 @@ def copy_term(term: Term) -> Term:
     return _copy_term_impl(term, var_map)
 
 
+def ground_copy(term: Term) -> Term:
+    """
+    Create a copy of a term following all variable bindings.
+
+    This "grounds" the term by dereferencing all variables and
+    copying the structure. Unbound variables are replaced with
+    fresh variables. This is useful for capturing a solution
+    at a particular point in time.
+    """
+    var_map: dict[int, Var] = {}
+    return _ground_copy_impl(term, var_map)
+
+
+def _ground_copy_impl(term: Term, var_map: dict[int, Var]) -> Term:
+    """Implementation of ground_copy."""
+    term = term.deref()
+
+    if isinstance(term, Var):
+        # Unbound variable - create fresh variable
+        var_id = id(term)
+        if var_id not in var_map:
+            var_map[var_id] = Var(term.name)
+        return var_map[var_id]
+
+    if isinstance(term, (Atom, Integer, Float)):
+        return term
+
+    if term is NIL:
+        return NIL
+
+    if isinstance(term, Struct):
+        new_args = tuple(_ground_copy_impl(arg, var_map) for arg in term.args)
+        return Struct(term.functor, new_args)
+
+    if isinstance(term, Cons):
+        new_head = _ground_copy_impl(term.head, var_map)
+        new_tail = _ground_copy_impl(term.tail, var_map)
+        return Cons(new_head, new_tail)
+
+    return term
+
+
 def _copy_term_impl(term: Term, var_map: dict[int, Var]) -> Term:
     """Implementation of copy_term with variable mapping."""
     term = term.deref()

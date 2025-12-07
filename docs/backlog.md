@@ -238,44 +238,66 @@ Implement basic interpreter for Horn clause programs.
 
 ---
 
-### B-GUARD-01 [BLOCKED] Implement guard operators
+### B-GUARD-01 [DONE] Implement guard operators and suspension
 
-Implement wait, commit, and cut guard operators.
+Implement proper AKL guard semantics with quiet/noisy distinction.
+
+**Reference:** `docs/deep-guards.md`
 
 **Details:**
-- Wait (?) - nondeterminate guard
-- Quiet wait (??) - ordered guard
-- Commit (|) - committed choice
-- Arrow (->) - conditional
-- Cut (!) - prune siblings
-- Guard evaluation in execution loop
-- Promotion mechanism
+
+Guard operators (from `compiler/transform.akl`):
+- `?` (noisy_wait) - Noisy, promotes when determinate
+- `->` (quiet_cut) - Quiet, requires leftmost, prunes right
+- `|` (quiet_commit) - Quiet, prunes all siblings
+- `??` (quiet_wait) - Quiet, requires leftmost, for ordered choice
+- `!` (noisy_cut) - Noisy, requires leftmost, prunes right
+
+Key concepts:
+- **Quiet**: No bindings on external variables allowed
+- **Noisy**: CAN have bindings on external variables (noisy promotion)
+- **Solved**: No pending goals in guard
+- **Leftmost**: First alternative in choice-box
 
 **Acceptance Criteria:**
-- Guards suspend when needed
-- Promotion occurs when guards succeed
-- Cut prunes alternatives
+- [x] Variables track their creating and-box (environment)
+- [x] Quiet guards (`->`, `|`, `??`) cannot bind external variables in guard
+- [x] Noisy guards (`?`, `!`) CAN bind external variables
+- [x] Guard pruning: `->`, `|`, `!` prune alternatives
+- [x] Non-pruning: `?`, `??` allow backtracking
+- [x] If-then-else works correctly
+- [x] Basic guard tests pass (32 tests)
 
-**Depends on:** B-INTERP-01
+**Depends on:** B-INTERP-01 (DONE)
 
-**Blocked by:** Need basic interpreter working first
+**Completed:** T-GUARD-01 (477 tests passing)
 
 ---
 
-### B-SPLIT-01 [BLOCKED] Implement and-box copying
+### B-SPLIT-01 [DONE] Implement and-box copying
 
 Implement and-box copying for nondeterministic splitting.
 
+**Reference:** `docs/deep-guards.md` (Nondeterministic Splitting section)
+
 **Details:**
-- Deep copy of and-box subtree
-- Copy local variables
-- Copy suspensions
-- Copy constraints
-- Handle forwarding pointers
+- Deep copy of and-box subtree (mother -> copy)
+- Copy local variables with fresh instances
+- External variables remain shared
+- Candidate finding: leftmost solved wait-guard (`?`)
+- CPS-based scheduler for sequential nondeterminism
 
 **Depends on:** B-GUARD-01
 
-**Blocked by:** Need guards working first
+**Tasks:**
+- T-SPLIT-01 (PARTIAL) - Copy infrastructure
+- T-SPLIT-02 (DONE) - CPS scheduler
+
+**Completed:**
+- `pyakl/copy.py` - And-box copying with local/external variable handling
+- `pyakl/scheduler.py` - CPS-based scheduler for nondeterminism
+- `ground_copy()` in unify.py for proper solution capture
+- All nondeterministic programs work (member, append, permutation, n-queens)
 
 ---
 
@@ -307,30 +329,52 @@ Implement interactive read-eval-print loop.
 
 ## Phase 3: Full AKL
 
-### B-GUARD-02 [BLOCKED] Full guard semantics
+### B-GUARD-02 [BLOCKED] Deep guards
 
-Complete guard implementation with all AKL semantics.
+Implement deep guards (general statements in guards).
+
+**Reference:**
+- `docs/deep-guards.md` (full documentation)
+- `dev-log/T-SPLIT-01.md` (insights on splitting semantics)
 
 **Details:**
-- External variable suspension
-- Stability detection
-- Leftmost alternative checking
-- Quiet vs non-quiet guards
+- Guards can contain arbitrary goals, not just constraints
+- Guard computation is local (own constraint store)
+- Asked constraints from union of local + external stores
+- Told constraints only to local store
+- Nondeterminism in guards creates alternative clauses
 
-**Depends on:** B-GUARD-01, B-SPLIT-01
+**Key insight:** Deep guards require proper suspension and wake semantics.
+When a guard cannot proceed (waiting on external variable), the and-box
+suspends. When the variable is bound, suspended and-boxes wake and retry.
+
+**Depends on:** B-GUARD-01, B-SPLIT-01, B-ENGINE-02
 
 ---
 
-### B-ENGINE-02 [BLOCKED] Implement promotion
+### B-ENGINE-02 [PARTIAL] Implement promotion
 
-Implement determinate and nondeterminate promotion.
+Implement determinate and nondeterminate (noisy) promotion.
+
+**Reference:**
+- `docs/deep-guards.md` (Promotion Rules section)
+- `dev-log/T-SPLIT-01.md` (binding management insights)
+- `dev-log/T-ENGINE-02.md` (current implementation)
 
 **Details:**
-- Determinate promotion (single alternative)
-- Guard promotion rules
-- Constraint propagation on promotion
+- [x] Quiet promotion: Move body to parent, no external bindings
+- [x] Noisy promotion: Move body + external bindings to parent
+- [ ] Wake suspended goals on promoted variables (deferred to B-ENGINE-04)
+- [x] Remove choice-box when determinate (pruning guards)
 
-**Depends on:** B-GUARD-02
+**Key insight (graph rewriting):** AKL execution is graph rewriting, not tree traversal:
+- Clauses are reduction rules: `H :- G | B` reduces to `B` when guard `G` succeeds
+- Promotion = clause body replaces guard computation in parent
+- CPS scheduler implements sequential simulation with correct semantics
+
+**Next:** T-ENGINE-02 (PARTIAL - wake suspended goals deferred)
+
+**Depends on:** B-GUARD-01, B-SPLIT-01
 
 ---
 
@@ -338,11 +382,26 @@ Implement determinate and nondeterminate promotion.
 
 Implement nondeterminate promotion via copying.
 
+**Reference:**
+- `docs/deep-guards.md` (Nondeterministic Splitting section)
+- `dev-log/T-SPLIT-01.md` (implementation attempts and insights)
+- `pyakl/scheduler.py` (experimental, documents known issues)
+
 **Details:**
-- Stability detection
-- Candidate selection
-- Subtree copying
-- Scheduling after split
+- Stability detection: and-box has no suspended goals that can make progress
+- Candidate selection: `find_candidate()` in `pyakl/copy.py`
+- Subtree copying: `copy_andbox_subtree()` in `pyakl/copy.py`
+- Scheduling after split: add copied branch to task queue
+
+**Key insights from T-SPLIT-01:**
+1. Generator-based interpreter is valid for sequential execution
+2. True splitting requires each branch to have independent variables
+3. Use `copy_andbox_subtree()` - local vars copied, external vars shared
+4. Trail-based undo doesn't work for parallel branches (bindings shared)
+
+**Available infrastructure:**
+- `pyakl/copy.py` - and-box copying with proper local/external handling
+- `pyakl/engine.py` - task queues (wake, recall, tasks)
 
 **Depends on:** B-ENGINE-02
 

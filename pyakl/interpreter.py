@@ -1,14 +1,21 @@
 """
-Simple AKL Interpreter.
+AKL Interpreter with proper guard semantics.
 
-This module implements a basic interpreter for AKL programs.
-For now, focuses on deterministic Horn clauses with backtracking.
+This module implements a proper AKL interpreter that handles:
+- Guard operators with quiet/noisy distinction
+- External variable tracking
+- Suspension on external variables (for quiet guards)
+- Proper promotion semantics
 
 Key components:
 - solve(): Main entry point for queries
-- execute_goal(): Execute a single goal
-- try_clause(): Try matching a clause
+- _execute(): Execute a single goal
+- _try_clause(): Try matching a clause with proper guard semantics
 - Backtracking via generator-based choice points
+
+Guard semantics:
+- Quiet guards (->. |, ??): Cannot bind external variables
+- Noisy guards (?, !): CAN bind external variables
 """
 
 from __future__ import annotations
@@ -16,10 +23,13 @@ from typing import Iterator, Generator, Any
 from dataclasses import dataclass
 
 from .term import Term, Var, Atom, Integer, Float, Struct, Cons, NIL
-from .unify import unify, copy_term
+from .unify import unify, copy_term, ground_copy
 from .program import Program, Clause, GuardType
 from .builtin import is_builtin, call_builtin, akl_context
-from .engine import ExState, AndBox
+from .engine import (
+    ExState, AndBox, EnvId, ConstrainedVar,
+    is_local_var, is_external_var
+)
 
 
 # =============================================================================
@@ -48,13 +58,22 @@ class Interpreter:
     """
     AKL interpreter for executing queries against a program.
 
-    Uses generator-based backtracking for choice points.
+    Implements proper AKL guard semantics:
+    - Quiet guards (->. |, ??): Cannot bind external variables
+    - Noisy guards (?, !): CAN bind external variables (noisy promotion)
+    - Pruning guards (->. |, !): Prevent backtracking to remaining clauses
+    - Non-pruning guards (?, ??): Allow backtracking
     """
 
     def __init__(self, program: Program) -> None:
         self.program = program
         self.exstate = ExState()
-        self.andb = AndBox()
+
+        # Root and-box for the query
+        self.root_andb = AndBox()
+
+        # Current and-box (changes during clause execution)
+        self.current_andb = self.root_andb
 
         # Track query variables for collecting bindings
         self.query_vars: dict[str, Var] = {}
@@ -74,7 +93,8 @@ class Interpreter:
         """
         # Reset state
         self.exstate = ExState()
-        self.andb = AndBox()
+        self.root_andb = AndBox()
+        self.current_andb = self.root_andb
         self.query_vars = {}
 
         # Set global context for builtins that need program access
@@ -119,7 +139,8 @@ class Interpreter:
             value = var.deref()
             # Only include if bound to something other than itself
             if value is not var:
-                bindings[name] = value
+                # Use ground_copy to capture the value with all bindings followed
+                bindings[name] = ground_copy(value)
         return Solution(bindings)
 
     def _execute(self, goal: Term) -> Generator[None, None, None]:
@@ -138,6 +159,16 @@ class Interpreter:
             yield from self._execute_conjunction(goal.args[0], goal.args[1])
             return
 
+        # Handle if-then-else: (Cond -> Then ; Else)
+        # Must check BEFORE plain disjunction
+        if isinstance(goal, Struct) and goal.functor == Atom(";") and goal.arity == 2:
+            cond_then = goal.args[0]
+            if isinstance(cond_then, Struct) and cond_then.functor == Atom("->") and cond_then.arity == 2:
+                yield from self._execute_if_then_else(
+                    cond_then.args[0], cond_then.args[1], goal.args[1]
+                )
+                return
+
         # Handle disjunction
         if isinstance(goal, Struct) and goal.functor == Atom(";") and goal.arity == 2:
             yield from self._execute_disjunction(goal.args[0], goal.args[1])
@@ -151,15 +182,6 @@ class Interpreter:
         if isinstance(goal, Struct) and goal.functor == Atom("not") and goal.arity == 1:
             yield from self._execute_negation(goal.args[0])
             return
-
-        # Handle if-then-else: (Cond -> Then ; Else)
-        if isinstance(goal, Struct) and goal.functor == Atom(";") and goal.arity == 2:
-            cond_then = goal.args[0]
-            if isinstance(cond_then, Struct) and cond_then.functor == Atom("->") and cond_then.arity == 2:
-                yield from self._execute_if_then_else(
-                    cond_then.args[0], cond_then.args[1], goal.args[1]
-                )
-                return
 
         # Handle call/1
         if isinstance(goal, Struct) and goal.functor == Atom("call") and goal.arity >= 1:
@@ -188,7 +210,7 @@ class Interpreter:
 
         # Try built-in first
         if is_builtin(name, arity):
-            if call_builtin(name, arity, self.exstate, self.andb, args):
+            if call_builtin(name, arity, self.exstate, self.current_andb, args):
                 yield
             return
 
@@ -261,38 +283,91 @@ class Interpreter:
 
     def _try_clauses(self, goal: Term, clauses: list[Clause]) -> Generator[None, None, None]:
         """Try matching goal against a list of clauses."""
-        for clause in clauses:
-            yield from self._try_clause(goal, clause)
+        for i, clause in enumerate(clauses):
+            # Try this clause
+            for result in self._try_clause(goal, clause):
+                if result is True:
+                    # Pruning guard succeeded - stop trying other clauses
+                    yield
+                    return
+                else:
+                    # Normal success - yield and allow backtracking
+                    yield
 
-    def _try_clause(self, goal: Term, clause: Clause) -> Generator[None, None, None]:
-        """Try matching goal against a single clause."""
+    def _try_clause(self, goal: Term, clause: Clause) -> Generator[bool | None, None, None]:
+        """
+        Try matching goal against a single clause.
+
+        Implements proper AKL guard semantics:
+        - Creates a new and-box for clause execution
+        - Tracks external vs local variables
+        - Quiet guards fail if they bind external variables
+        - Noisy guards can bind external variables
+
+        Yields True if a pruning guard succeeded (should cut alternatives).
+        Yields None for normal success (allow backtracking).
+        """
         # Save trail position for backtracking
         trail_pos = self.exstate.trail_position()
 
         if self.debug:
             print(f"DEBUG: try clause {clause.head}")
 
-        # Copy clause with fresh variables
-        fresh_head, fresh_guard, fresh_body = self._copy_clause(clause)
+        # Save parent and-box
+        parent_andb = self.current_andb
+
+        # Create new and-box for this clause with child environment
+        clause_andb = AndBox()
+        clause_andb.env = EnvId(parent=parent_andb.env)
+        self.current_andb = clause_andb
+
+        # Copy clause with fresh constrained variables (local to clause_andb)
+        fresh_head, fresh_guard, fresh_body = self._copy_clause_with_env(clause, clause_andb)
 
         # Try to unify goal with head
+        # Note: Head unification CAN bind external variables - this is normal.
+        # The quiet/noisy distinction applies to the GUARD, not the head.
         if not unify(goal, fresh_head, self.exstate):
             if self.debug:
                 print(f"DEBUG: unification failed")
             self.exstate.undo_trail(trail_pos)
+            self.current_andb = parent_andb
             return
 
         if self.debug:
             print(f"DEBUG: unification succeeded, head={fresh_head.deref()}")
 
+        # Determine guard type properties
+        is_quiet_guard = clause.guard_type in (
+            GuardType.ARROW, GuardType.COMMIT, GuardType.QUIET_WAIT
+        )
+        is_pruning_guard = clause.guard_type in (
+            GuardType.ARROW, GuardType.COMMIT, GuardType.CUT
+        )
+
         # Handle guard if present
         if fresh_guard is not None:
-            # For now, just execute guard as goal
-            # More sophisticated guard handling would be needed for full AKL
-            guard_succeeded = False
             guard_trail = self.exstate.trail_position()
 
+            # For quiet guards, snapshot external variable values before guard
+            external_snapshot: dict[int, Term] = {}
+            if is_quiet_guard:
+                external_snapshot = self._snapshot_externals(goal, clause_andb)
+
+            guard_succeeded = False
             for _ in self._execute(fresh_guard):
+                # Check guard result for external bindings
+                # Quiet guards must not cause external variables to become
+                # more constrained (bound to a non-variable value)
+                if is_quiet_guard:
+                    changed = self._check_external_changes(external_snapshot, clause_andb)
+                    if changed:
+                        if self.debug:
+                            print(f"DEBUG: quiet guard changed external bindings: {changed}")
+                        # Undo guard bindings and try next solution
+                        self.exstate.undo_trail(guard_trail)
+                        continue
+
                 guard_succeeded = True
                 break
 
@@ -300,6 +375,7 @@ class Interpreter:
                 if self.debug:
                     print(f"DEBUG: guard failed")
                 self.exstate.undo_trail(trail_pos)
+                self.current_andb = parent_andb
                 return
 
         # Execute body goals
@@ -307,40 +383,191 @@ class Interpreter:
             # Build conjunction of body goals
             body_goal = self._goals_to_conjunction(fresh_body)
             for _ in self._execute(body_goal):
-                yield
+                # Restore parent context before yielding
+                self.current_andb = parent_andb
+                # Yield True to signal pruning, None otherwise
+                yield True if is_pruning_guard else None
+                # Restore clause context for next solution
+                self.current_andb = clause_andb
         else:
             # Fact - succeed immediately
-            yield
+            self.current_andb = parent_andb
+            yield True if is_pruning_guard else None
+            self.current_andb = clause_andb
 
-        # Backtrack - undo bindings
+        # Backtrack - undo bindings and restore parent
         self.exstate.undo_trail(trail_pos)
+        self.current_andb = parent_andb
 
-    def _copy_clause(self, clause: Clause) -> tuple[Term, Term | None, list[Term]]:
+    def _unify_tracking_external(
+        self, t1: Term, t2: Term,
+        local_andb: AndBox,
+        external_bindings: list[tuple[Var, Term]]
+    ) -> bool:
         """
-        Copy a clause with fresh variables.
+        Unify two terms, tracking which external variables get bound.
 
-        Returns (head, guard, body) with fresh variables.
-        Variables with the same name share the same fresh variable.
-        Anonymous variables (_) are always fresh.
+        External variables are those whose env is an ancestor of local_andb's env.
         """
-        # Map variable NAME to fresh variable (not id, since parser
-        # creates separate Var objects for each occurrence)
-        var_map: dict[str, Var] = {}
-        anon_counter = [0]  # Use list to allow mutation in closure
+        t1 = t1.deref()
+        t2 = t2.deref()
+
+        if t1 is t2:
+            return True
+
+        # Handle variable cases
+        if isinstance(t1, Var):
+            return self._bind_var_tracking(t1, t2, local_andb, external_bindings)
+
+        if isinstance(t2, Var):
+            return self._bind_var_tracking(t2, t1, local_andb, external_bindings)
+
+        # Non-variable cases
+        if isinstance(t1, Atom):
+            return isinstance(t2, Atom) and t1 is t2
+
+        if isinstance(t1, Integer):
+            return isinstance(t2, Integer) and t1.value == t2.value
+
+        if isinstance(t1, Float):
+            return isinstance(t2, Float) and t1.value == t2.value
+
+        if isinstance(t1, Struct):
+            if not isinstance(t2, Struct):
+                return False
+            if t1.functor != t2.functor or t1.arity != t2.arity:
+                return False
+            return all(
+                self._unify_tracking_external(a1, a2, local_andb, external_bindings)
+                for a1, a2 in zip(t1.args, t2.args)
+            )
+
+        if isinstance(t1, Cons):
+            if not isinstance(t2, Cons):
+                return False
+            return (
+                self._unify_tracking_external(t1.head, t2.head, local_andb, external_bindings) and
+                self._unify_tracking_external(t1.tail, t2.tail, local_andb, external_bindings)
+            )
+
+        return False
+
+    def _bind_var_tracking(
+        self, var: Var, term: Term,
+        local_andb: AndBox,
+        external_bindings: list[tuple[Var, Term]]
+    ) -> bool:
+        """Bind variable and track if it's external."""
+        # Check if variable is external to local_andb
+        is_external = False
+        if isinstance(var, ConstrainedVar) and var.env is not None:
+            # Variable is external if its env is NOT local_andb's env
+            # and is an ancestor of local_andb's env
+            is_external = (var.env is not local_andb.env and
+                          var.env.is_ancestor_of(local_andb.env))
+
+        # Trail the binding
+        self.exstate.trail_binding(var, var.binding)
+
+        # Perform binding
+        var.binding = term
+
+        # Track external binding
+        if is_external:
+            external_bindings.append((var, term))
+
+        # Wake suspended goals
+        if isinstance(var, ConstrainedVar):
+            var.wake_all(self.exstate)
+
+        return True
+
+    def _is_var_external(self, var: Var, local_andb: AndBox) -> bool:
+        """Check if a variable is external to local_andb."""
+        if isinstance(var, ConstrainedVar):
+            if var.env is None:
+                return True  # No env means external
+            if var.env is not local_andb.env:
+                return var.env.is_ancestor_of(local_andb.env)
+            return False
+        else:
+            # Plain Var without env is external (query variable)
+            return True
+
+    def _collect_vars_no_deref(self, term: Term, seen: set[int]) -> list[Var]:
+        """Collect all variables from term WITHOUT following bindings."""
+        result = []
+
+        if isinstance(term, Var):
+            var_id = id(term)
+            if var_id in seen:
+                return result
+            seen.add(var_id)
+            result.append(term)
+            # Also follow the binding if present
+            if term.binding is not None:
+                result.extend(self._collect_vars_no_deref(term.binding, seen))
+            return result
+
+        if isinstance(term, Struct):
+            for arg in term.args:
+                result.extend(self._collect_vars_no_deref(arg, seen))
+
+        if isinstance(term, Cons):
+            result.extend(self._collect_vars_no_deref(term.head, seen))
+            result.extend(self._collect_vars_no_deref(term.tail, seen))
+
+        return result
+
+    def _snapshot_externals(self, goal: Term, local_andb: AndBox) -> dict[int, Term]:
+        """Snapshot the current deref values of external variables reachable from goal."""
+        all_vars = self._collect_vars_no_deref(goal, set())
+        external_vars = [v for v in all_vars if self._is_var_external(v, local_andb)]
+        return {id(v): v.deref() for v in external_vars}
+
+    def _check_external_changes(
+        self, snapshot: dict[int, Term], local_andb: AndBox
+    ) -> list[tuple[Var, Term, Term]]:
+        """Check if any external variables changed from their snapshot.
+
+        Returns list of (var, old_value, new_value) for changed externals.
+        """
+        changes = []
+        for var_id, old_deref in snapshot.items():
+            # Find the variable - we need to get it from somewhere
+            # The old_deref tells us what it used to point to
+            # If old_deref was a Var, check if it's now bound
+            if isinstance(old_deref, Var):
+                new_deref = old_deref.deref()
+                if new_deref is not old_deref:
+                    # The external became more bound
+                    changes.append((old_deref, old_deref, new_deref))
+        return changes
+
+    def _copy_clause_with_env(self, clause: Clause, andb: AndBox) -> tuple[Term, Term | None, list[Term]]:
+        """
+        Copy a clause with fresh constrained variables local to andb.
+
+        Returns (head, guard, body) with fresh ConstrainedVar instances
+        that have their env set to andb.env.
+        """
+        # Map variable NAME to fresh variable
+        var_map: dict[str, ConstrainedVar] = {}
+        anon_counter = [0]
 
         def copy_with_fresh_vars(term: Term) -> Term:
-            """Copy term, replacing variables with fresh ones."""
+            """Copy term, replacing variables with fresh constrained ones."""
             term = term.deref()
 
             if isinstance(term, Var):
                 # Anonymous variables are always unique
                 if term.name == "_" or term.name is None:
                     anon_counter[0] += 1
-                    return Var(f"_G{anon_counter[0]}")
+                    return ConstrainedVar(f"_G{anon_counter[0]}", andb.env)
 
                 # Named variables share by name
                 if term.name not in var_map:
-                    var_map[term.name] = Var(term.name)
+                    var_map[term.name] = ConstrainedVar(term.name, andb.env)
                 return var_map[term.name]
 
             if isinstance(term, (Atom, Integer, Float)):
@@ -366,6 +593,14 @@ class Interpreter:
         fresh_body = [copy_with_fresh_vars(g) for g in clause.body]
 
         return fresh_head, fresh_guard, fresh_body
+
+    def _copy_clause(self, clause: Clause) -> tuple[Term, Term | None, list[Term]]:
+        """
+        Copy a clause with fresh variables (legacy method).
+
+        Uses current_andb for the environment.
+        """
+        return self._copy_clause_with_env(clause, self.current_andb)
 
     def _goals_to_conjunction(self, goals: list[Term]) -> Term:
         """Convert a list of goals to a conjunction term."""

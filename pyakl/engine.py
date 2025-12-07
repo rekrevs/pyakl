@@ -237,8 +237,8 @@ class AndBox:
         return len(self.unifiers) == 0 and len(self.constraints) == 0
 
     def is_solved(self) -> bool:
-        """Check if no remaining alternatives (determinate)."""
-        return self.tried is None
+        """Check if solved (no pending goals and no child choice-boxes)."""
+        return self.tried is None and not self.goals
 
     def mark_dead(self) -> None:
         """Mark this and-box as dead."""
@@ -573,11 +573,12 @@ def is_local_var(var: Var, andb: AndBox) -> bool:
 
 
 def is_external_var(var: Var, andb: AndBox) -> bool:
-    """Check if variable belongs to an ancestor and-box."""
+    """Check if variable belongs to an ancestor and-box or is a query-level variable."""
     if isinstance(var, ConstrainedVar):
         # Variable's env must be an ancestor of andb's env (but not same)
         return var.env.is_ancestor_of(andb.env) and var.env is not andb.env
-    return False
+    # Plain Var without env is a query-level variable - always external to child and-boxes
+    return True
 
 
 def suspend_on_var(exstate: ExState, andb: AndBox, var: Var) -> ConstrainedVar:
