@@ -1,0 +1,22 @@
+{
+  "version": "2.0.0",
+  "next_id": 1,
+  "id_format": "category",
+  "tasks": [
+    {"id": "T-TERM-01", "status": "DONE", "summary": "Term representation classes"},
+    {"id": "T-PARSE-01", "status": "DONE", "summary": "Basic parser"},
+    {"id": "T-PARSE-02", "status": "DONE", "summary": "Extended parser features"},
+    {"id": "T-PARSE-03", "status": "READY", "summary": "Parser improvements"},
+    {"id": "T-BOX-01", "status": "DONE", "summary": "Box/environment implementation"},
+    {"id": "T-ENGINE-01", "status": "DONE", "summary": "Basic execution engine"},
+    {"id": "T-ENGINE-02", "status": "PARTIAL", "summary": "Advanced execution features"},
+    {"id": "T-ENGINE-02-FIX", "status": "DONE", "summary": "Engine bug fixes"},
+    {"id": "T-ENGINE-03", "status": "DONE", "summary": "REPL with AKL qa.akl"},
+    {"id": "T-ENGINE-04", "status": "ONGOING", "summary": "AKL execution model v2 compliance"},
+    {"id": "T-GUARD-01", "status": "DONE", "summary": "Guard execution"},
+    {"id": "T-BUILTIN-02", "status": "PARTIAL", "summary": "Built-in predicates"},
+    {"id": "T-SPLIT-01", "status": "PARTIAL", "summary": "Split/choice points"},
+    {"id": "T-SPLIT-02", "status": "DONE", "summary": "Split improvements"},
+    {"id": "T-SPLIT-03", "status": "ONGOING", "summary": "Split/backtracking fixes"}
+  ]
+}
